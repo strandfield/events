@@ -2,6 +2,7 @@
 // This file is part of the 'events' project.
 // For conditions of distribution and use, see copyright notice in LICENSE.
 
+#include <algorithm>
 #include <iostream>
 #include <vector>
 
