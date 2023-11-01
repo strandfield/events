@@ -29,7 +29,7 @@ void notify_all(const std::vector<T*>& subscribers, void (T::*method)(Params...)
   notify_all(subscribers.begin(), subscribers.end(), method, std::forward<Args>(args)...);
 }
 
-template<typename S, typename P>
+template<typename P>
 class Subscriber;
 
 template<typename S>
@@ -39,10 +39,18 @@ public:
 
   using subscriber_t = S;
 
+  struct PubPtrSetter
+  {
+    void operator()(subscriber_t* s, Publisher<S>* p)
+    {
+      s->m_publisher = static_cast<typename subscriber_t::publisher_t*>(p);;
+    }
+  };
+
   ~Publisher()
   {
     std::for_each(m_subscribers.begin(), m_subscribers.end(), [](subscriber_t* s){
-      s->m_publisher = nullptr;
+      PubPtrSetter()(s, nullptr);
     });
   }
 
@@ -53,7 +61,7 @@ public:
     if (it == m_subscribers.end())
     {
       m_subscribers.push_back(sub);
-      sub->m_publisher = this;
+      PubPtrSetter()(sub, this);
     }
   }
 
@@ -69,16 +77,16 @@ public:
   // }
 
   template<typename P>
-  void removeSubscriber(Subscriber<S, P>* sub)
+  void removeSubscriber(Subscriber<P>* sub)
   {
-    static_assert(std::is_base_of<Subscriber<S, P>, subscriber_t>::value);
+    static_assert(std::is_base_of<Subscriber<P>, subscriber_t>::value);
 
     auto it = find_subscriber(static_cast<subscriber_t*>(sub));
 
     if (it != m_subscribers.end())
     {
       m_subscribers.erase(it);
-      sub->m_publisher = nullptr;
+      PubPtrSetter()(static_cast<subscriber_t*>(sub), nullptr);
     }
   }
 
@@ -103,15 +111,12 @@ private:
   std::vector<subscriber_t*> m_subscribers;
 };
 
-// maybe the publisher would be enough, as it contains a typedef to the 
-// actual subscriber
-template<typename S, typename P = Publisher<S>>
+template<typename P>
 class Subscriber
 {
 public:
 
   using publisher_t = P;
-  using subscriber_t = S;
 
   virtual ~Subscriber()
   {
@@ -123,13 +128,12 @@ public:
 
   publisher_t* publisher() const
   {
-    static_assert(std::is_base_of<Publisher<S>, publisher_t>::value);
-    return static_cast<publisher_t*>(m_publisher);
+    return m_publisher;
   }
 
 private:
-  friend Publisher<S>;
-  Publisher<S>* m_publisher = nullptr;
+  friend typename P::PubPtrSetter;
+  publisher_t* m_publisher = nullptr;
 };
 
 #endif // PUBSUB_H

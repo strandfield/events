@@ -202,7 +202,7 @@ public:
   void haveLunch();
 };
 
-class MySubscriber : public Subscriber<MySubscriber, MyPublisher>
+class MySubscriber : public Subscriber<MyPublisher>
 {
 public:
   explicit MySubscriber(MyPublisher* pub = nullptr);
