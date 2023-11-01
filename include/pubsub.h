@@ -6,6 +6,7 @@
 #define PUBSUB_H
 
 #include <algorithm>
+#include <type_traits>
 #include <vector>
 
 template<typename T, typename Iter, typename... Params, typename... Args>
@@ -28,15 +29,14 @@ void notify_all(const std::vector<T*>& subscribers, void (T::*method)(Params...)
   notify_all(subscribers.begin(), subscribers.end(), method, std::forward<Args>(args)...);
 }
 
-template<typename P, typename S>
+template<typename S, typename P>
 class Subscriber;
 
-template<typename P, typename S>
+template<typename S>
 class Publisher
 {
 public:
 
-  using publisher_t = P;
   using subscriber_t = S;
 
   ~Publisher()
@@ -53,9 +53,7 @@ public:
     if (it == m_subscribers.end())
     {
       m_subscribers.push_back(sub);
-
-      static_assert(std::is_same<typename subscriber_t::publisher_t, P>::value);
-      sub->m_publisher = static_cast<typename subscriber_t::publisher_t*>(this);
+      sub->m_publisher = this;
     }
   }
 
@@ -70,8 +68,11 @@ public:
   //   }
   // }
 
-  void removeSubscriber(Subscriber<P, S>* sub)
+  template<typename P>
+  void removeSubscriber(Subscriber<S, P>* sub)
   {
+    static_assert(std::is_base_of<Subscriber<S, P>, subscriber_t>::value);
+
     auto it = find_subscriber(static_cast<subscriber_t*>(sub));
 
     if (it != m_subscribers.end())
@@ -102,7 +103,9 @@ private:
   std::vector<subscriber_t*> m_subscribers;
 };
 
-template<typename P, typename S>
+// maybe the publisher would be enough, as it contains a typedef to the 
+// actual subscriber
+template<typename S, typename P = Publisher<S>>
 class Subscriber
 {
 public:
@@ -120,12 +123,13 @@ public:
 
   publisher_t* publisher() const
   {
-    return m_publisher;
+    static_assert(std::is_base_of<Publisher<S>, publisher_t>::value);
+    return static_cast<publisher_t*>(m_publisher);
   }
 
 private:
-  friend Publisher<P, S>;
-  publisher_t* m_publisher = nullptr;
+  friend Publisher<S>;
+  Publisher<S>* m_publisher = nullptr;
 };
 
 #endif // PUBSUB_H

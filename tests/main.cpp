@@ -193,17 +193,16 @@ void test_partial_args()
   REQUIRE(total == (1+2+1));
 }
 
-class MyPublisher;
 class MySubscriber;
 
-class MyPublisher : public Publisher<MyPublisher, MySubscriber>
+class MyPublisher : public Publisher<MySubscriber>
 {
 public:
   void greets();
   void haveLunch();
 };
 
-class MySubscriber : public Subscriber<MyPublisher, MySubscriber>
+class MySubscriber : public Subscriber<MySubscriber, MyPublisher>
 {
 public:
   explicit MySubscriber(MyPublisher* pub = nullptr);
@@ -286,6 +285,9 @@ void test_pubsub()
   REQUIRE(pub.subscribers().size() == 2);
   pub.addSubscriber(thegerman.get()); // no-op
   REQUIRE(pub.subscribers().size() == 2);
+
+  REQUIRE(thefrench.publisher() == &pub);
+  REQUIRE((std::is_same<decltype(thefrench.publisher()), MyPublisher*>::value));
 
   pub.greets();
   pub.haveLunch();
