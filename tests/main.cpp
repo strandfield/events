@@ -149,6 +149,35 @@ void test_once()
   REQUIRE(super == 1);
 }
 
+void test_partial_args()
+{
+  // The goal of this test is to verify that an event listener 
+  // is allowed to receive less argument than passed.
+  
+  struct PartialEE : EventEmitter
+  {
+    void twoArgs(int a, int b) {
+      emit(&PartialEE::twoArgs, a, b);
+    }
+  };
+
+  int total = 0;
+
+  PartialEE ee;
+
+  ee.on(&PartialEE::twoArgs, [&total](int a, int b){
+    total += (a + b);
+  });
+
+  ee.on(&PartialEE::twoArgs, [&total](int a){
+    total += a;
+  });
+
+  ee.twoArgs(1, 2);
+
+  REQUIRE(total == (1+2+1));
+}
+
 class MyPublisher;
 class MySubscriber;
 
@@ -259,6 +288,7 @@ void run()
 {
   test_disconnect();
   test_two_events();
+  test_partial_args();
   test_once();
   test_pubsub();
 }
