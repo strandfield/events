@@ -117,6 +117,17 @@ int main() {
 }
 ```
 
+The `EventEmitter` class supports partial use of the signal's parameters, so the following
+also works:
+
+```cpp
+Person p;
+p.on(&Person::nameChanged, [&p](/* std::string */) {
+  std::cout << "Hello " << p.name() << "!" << std::endl;
+});
+p.setName("Homer Simpson");
+```
+
 ### Limitations & disclaimers
 
 **Thread-safety:** 🧶
