@@ -3,6 +3,7 @@
 // For conditions of distribution and use, see copyright notice in LICENSE.
 
 #include "event-emitter.h"
+#include "object.h"
 #include "pubsub.h"
 
 #include <iostream>
@@ -284,6 +285,70 @@ void test_pubsub()
   pub.greets();
 }
 
+class MyFirstObject : public Object
+{
+public:
+  void signal0(int n)
+  {
+    emit(&MyFirstObject::signal0, n);
+  }
+
+};
+
+void test_object()
+{
+  MyFirstObject this_is_me;
+
+  int n = 0;
+
+  Object::connect(&this_is_me, &MyFirstObject::signal0, [&n](int a) {
+    n += a;
+  });
+
+  REQUIRE(n == 0);
+  this_is_me.signal0(3);
+  REQUIRE(n == 3);
+}
+
+class MySecondObject : public Object
+{
+  int& m_n;
+public:
+  explicit MySecondObject(int &n) : m_n(n) {}
+
+  void slot0(int a) {
+    m_n += a;
+  }
+
+  void slot00() {
+    m_n += 1;
+  }
+};
+
+void test_two_objects()
+{
+  MyFirstObject this_is_me;
+
+  int n = 0;
+
+  {
+    MySecondObject second{n};
+    
+    Object::connect(&this_is_me, &MyFirstObject::signal0, &second, &MySecondObject::slot0);
+    Object::connect(&this_is_me, &MyFirstObject::signal0, &second, &MySecondObject::slot00);
+    Object::connect(&this_is_me, &MyFirstObject::signal0, &second, [&n](int a) {
+      n += a;
+    });
+
+    REQUIRE(n == 0);
+    this_is_me.signal0(2);
+    REQUIRE(n == 5);
+  }
+
+  this_is_me.signal0(3);
+  REQUIRE(n == 5);
+}
+
 void run()
 {
   test_disconnect();
@@ -291,6 +356,8 @@ void run()
   test_partial_args();
   test_once();
   test_pubsub();
+  test_object();
+  test_two_objects();
 }
 
 int main()
