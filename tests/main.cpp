@@ -285,68 +285,70 @@ void test_pubsub()
   pub.greets();
 }
 
-class MyFirstObject : public Object
+class SpinBox : public Object
 {
 public:
-  void signal0(int n)
+  void valueChanged(int n)
   {
-    emit(&MyFirstObject::signal0, n);
+    emit(&SpinBox::valueChanged, n);
   }
-
 };
 
 void test_object()
 {
-  MyFirstObject this_is_me;
+  SpinBox this_is_me;
 
   int n = 0;
 
-  Object::connect(&this_is_me, &MyFirstObject::signal0, [&n](int a) {
+  Object::connect(&this_is_me, &SpinBox::valueChanged, [&n](int a) {
     n += a;
   });
 
   REQUIRE(n == 0);
-  this_is_me.signal0(3);
+  this_is_me.valueChanged(3);
   REQUIRE(n == 3);
 }
 
-class MySecondObject : public Object
+class Button : public Object
 {
-  int& m_n;
 public:
-  explicit MySecondObject(int &n) : m_n(n) {}
-
-  void slot0(int a) {
-    m_n += a;
+  void clicked()
+  {
+    emit(&Button::clicked);
   }
+};
 
-  void slot00() {
-    m_n += 1;
-  }
+class Dialog : public Object
+{
+private:
+  bool m_visible = false;
+public:
+  bool visible() const { return m_visible;}
+  void open() { m_visible = true; opened(); }
+  void opened() { emit(&Dialog::opened); }
 };
 
 void test_two_objects()
 {
-  MyFirstObject this_is_me;
+  Button mybutton;
 
-  int n = 0;
+  int nopen = 0;
 
   {
-    MySecondObject second{n};
+    Dialog dialog;
     
-    Object::connect(&this_is_me, &MyFirstObject::signal0, &second, &MySecondObject::slot0);
-    Object::connect(&this_is_me, &MyFirstObject::signal0, &second, &MySecondObject::slot00);
-    Object::connect(&this_is_me, &MyFirstObject::signal0, &second, [&n](int a) {
-      n += a;
+    Object::connect(&mybutton, &Button::clicked, &dialog, &Dialog::open);
+    Object::connect(&dialog, &Dialog::opened, [&nopen]() {
+      ++nopen;
     });
 
-    REQUIRE(n == 0);
-    this_is_me.signal0(2);
-    REQUIRE(n == 5);
+    REQUIRE(nopen == 0);
+    mybutton.clicked();
+    REQUIRE(nopen == 1);
   }
 
-  this_is_me.signal0(3);
-  REQUIRE(n == 5);
+  mybutton.clicked();
+  REQUIRE(nopen == 1);
 }
 
 void run()

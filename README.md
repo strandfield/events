@@ -128,7 +128,55 @@ p.on(&Person::nameChanged, [&p](/* std::string */) {
 p.setName("Homer Simpson");
 ```
 
-### Limitations & disclaimers
+### Object
+
+A class, based on `EventEmitter`, that provides a connection mechanism between signals and slots 
+similar to Qt's QObject.
+
+Users are meant to derive from `Object` and use `connect()` for connection a signal
+to a slot and `emit()` for emitting signals.
+
+Using this class could be considered safer than using `EventEmitter` directly as:
+- the set of "events" ought to be restricted to the "signals" declared in the object class 
+  (reducing the potential for surprises);
+- disconnection is done automatically when either object destroyed 
+  (as opposed to only when the emitter is destroyed).
+
+Example:
+
+```cpp
+class Button : public Object
+{
+public:
+  void clicked()
+  {
+    emit(&Button::clicked);
+  }
+};
+
+class Dialog : public Object
+{
+private:
+  bool m_visible = false;
+public:
+  bool visible() const { return m_visible; }
+  void open() { m_visible = true; opened(); }
+  void opened() { emit(&Dialog::opened); }
+};
+
+int main()
+{
+  Button button;
+  Dialog dialog;
+  Object::connect(&button, &Button::clicked, &dialog, &Dialog::open);
+  Object::connect(&dialog, &Dialog::opened, []() {
+    std::cout << "Dialog opened!" << std::endl;
+  });
+  button.clicked();
+}
+```
+
+## Limitations & disclaimers
 
 **Thread-safety:** 🧶
 
