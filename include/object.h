@@ -7,6 +7,16 @@
 
 #include  "event-emitter.h"
 
+/**
+ * @brief a class providing an event-listening mechanism similar to Qt signal/slot system
+ * 
+ * Subclasses can emit signals by declaring them as member functions and using emit() 
+ * for emitting the signal.
+ * Connections are made using the various overloads of the connect() function.
+ * 
+ * Currently the system is single-threaded: slot invocation is performed immediately 
+ * in the thread that emitted the signal.
+ */
 class Object
 {
 public:
@@ -25,16 +35,34 @@ public:
   void emit(void (T::*event)(Params...), Args &&...args);
 
 private:
-  EventEmitter m_events;
-  std::vector<ConnectionHandle> m_connection_list;
+  EventEmitter m_events; // stores the connections where this object is the source of the signal and handles signal emission.
+  std::vector<ConnectionHandle> m_connection_list; // stores the connection in which this object receives the notification.
+                                                   // this is used to automatically break the connections when this object
+                                                   // is destroyed.
 };
 
+/**
+ * @brief emits a signal
+ * @param event  a pointer to a member function representing the signal
+ * @param args   the signal arguments
+ * 
+ * This immediately invokes (in the current thread) the slots connected to this signal.
+ */
 template<typename T, typename... Params, typename... Args>
 inline void Object::emit(void (T::*event)(Params...), Args &&...args)
 {
   m_events.emit(event, std::forward<Args>(args)...);
 }
 
+/**
+ * @brief connects a signal to a callback function
+ * @param srcObject  the object that may emit the signal
+ * @param event      a pointer to a member function representing the signal
+ * @param callback   a function to call when the signal is emitted
+ * 
+ * @warning the connection will remain active until @a srcObject is destroyed so 
+ * be careful about the lifetime of @a callback.
+ */
 template<typename SrcT, typename SigObjT, typename F, typename... Args>
 inline void Object::connect(SrcT* srcObject, void (SigObjT::*event)(Args...), F&& callback)
 {
@@ -43,6 +71,17 @@ inline void Object::connect(SrcT* srcObject, void (SigObjT::*event)(Args...), F&
   src->m_events.on(event, std::forward<F>(callback));
 }
 
+/**
+ * @brief connects a signal to a callback function
+ * @param srcObject      the object that may emit the signal
+ * @param event          a pointer to a member function representing the signal
+ * @param contextObject  a context object used to manage the lifetime of the connection
+ * @param callable       a function to call when the signal is emitted
+ * 
+ * @note unlike the previous overload in which the connection remains active until @a srcObject
+ * is destroyed, this overload takes an additional @a contextObject. The connection is broken 
+ * when either of these objects is destroyed.
+ */
 template<typename SrcT, typename ContextT, typename SigObjT, typename F, typename... SrcArgs>
 inline void Object::connect(SrcT* srcObject, void (SigObjT::*event)(SrcArgs...), ContextT* contextObject, F&& callable)
 {
@@ -54,19 +93,18 @@ inline void Object::connect(SrcT* srcObject, void (SigObjT::*event)(SrcArgs...),
   context->m_connection_list.push_back(std::move(handle));
 }
 
+/**
+ * @brief connects a signal from an object to the slot of another
+ * @param srcObject   the object that may emit the signal
+ * @param event       a pointer to a member function representing the signal
+ * @param destObject  the object which slot will be invoked
+ * @param slotFunc    a pointer to the slot (member function)
+ * 
+ * The connection is broken when either of the objects is destroyed.
+ */
 template <typename SrcT, typename DestT, typename SigObjT, typename... SrcArgs, typename... DestArgs>
 inline void Object::connect(SrcT *srcObject, void (SigObjT::*event)(SrcArgs...), DestT *destObject, void (DestT::*slotFunc)(DestArgs...))
 {
-  /*
-  static_assert(std::is_base_of_v<Object, SrcT>, "Source object must be derived from Object");
-  static_assert(std::is_base_of_v<Object, DestT>, "Destination object must be derived from Object");
-  auto *src = static_cast<Object *>(srcObject);
-  auto *dest = static_cast<Object *>(destObject);
-  ConnectionHandle handle = src->m_events.on(event, [destObject, slotFunc](DestArgs... data)
-                                             { std::invoke(slotFunc, *destObject, std::forward<DestArgs>(data)...); });
-  dest->m_connection_list.push_back(std::move(handle));
-  */
-
   Object::connect(srcObject, event, destObject, [destObject, slotFunc](DestArgs... data)
                                              { std::invoke(slotFunc, *destObject, std::forward<DestArgs>(data)...); });
 }
