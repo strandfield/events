@@ -20,6 +20,20 @@ void test_require(bool cond, const char* test, const char* file, int line)
   }
 }
 
+void print_status_code(int status)
+{
+  std::cout << status << std::endl;
+}
+
+void test_invoke_relaxed()
+{
+  invoke_relaxed(&print_status_code, 200, "OK");
+
+  int n = 0;
+  invoke_relaxed([&n](int status) { n = status; }, 404, "Not found");
+  REQUIRE(n == 404);
+}
+
 class Person : public EventEmitter
 {
 private:
@@ -353,6 +367,7 @@ void test_two_objects()
 
 void run()
 {
+  test_invoke_relaxed();
   test_disconnect();
   test_two_events();
   test_partial_args();
