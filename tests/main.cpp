@@ -129,7 +129,13 @@ void test_two_events()
 
   int n = 0;
   int p = 0;
-  
+
+  // if the following REQUIRE fails on MSVC, you may have to disable Identical COMDAT Folding (ICF)
+  // with the /OPT:NOICF linker flag.
+  // Reference: 
+  // https://stackoverflow.com/questions/14176320/why-are-member-function-pointers-behaving-so-weirdly-in-visual-c
+  REQUIRE(&MyClass::pChanged != &MyClass::nChanged);
+
   a.on(&MyClass::nChanged, [&n](int val){
     n = val;
   });
@@ -193,17 +199,16 @@ void test_partial_args()
   REQUIRE(total == (1+2+1));
 }
 
-class MyPublisher;
 class MySubscriber;
 
-class MyPublisher : public Publisher<MyPublisher, MySubscriber>
+class MyPublisher : public Publisher<MySubscriber>
 {
 public:
   void greets();
   void haveLunch();
 };
 
-class MySubscriber : public Subscriber<MyPublisher, MySubscriber>
+class MySubscriber : public Subscriber<MyPublisher>
 {
 public:
   explicit MySubscriber(MyPublisher* pub = nullptr);
@@ -286,6 +291,9 @@ void test_pubsub()
   REQUIRE(pub.subscribers().size() == 2);
   pub.addSubscriber(thegerman.get()); // no-op
   REQUIRE(pub.subscribers().size() == 2);
+
+  REQUIRE(thefrench.publisher() == &pub);
+  REQUIRE((std::is_same<decltype(thefrench.publisher()), MyPublisher*>::value));
 
   pub.greets();
   pub.haveLunch();

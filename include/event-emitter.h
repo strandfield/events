@@ -93,6 +93,9 @@ namespace details
 
     bool matches(const std::any& signal) const override
     {
+      if (signal.type() != typeid(MemFnPtr)) {
+        return false;
+      }
       return std::any_cast<MemFnPtr>(signal) == m_signal;
     }
 
