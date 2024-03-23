@@ -129,7 +129,13 @@ void test_two_events()
 
   int n = 0;
   int p = 0;
-  
+
+  // if the following REQUIRE fails on MSVC, you may have to disable Identical COMDAT Folding (ICF)
+  // with the /OPT:NOICF linker flag.
+  // Reference: 
+  // https://stackoverflow.com/questions/14176320/why-are-member-function-pointers-behaving-so-weirdly-in-visual-c
+  REQUIRE(&MyClass::pChanged != &MyClass::nChanged);
+
   a.on(&MyClass::nChanged, [&n](int val){
     n = val;
   });

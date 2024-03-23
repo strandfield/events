@@ -93,11 +93,10 @@ namespace details
 
     bool matches(const std::any& signal) const override
     {
-      if (auto val = std::any_cast<MemFnPtr>(&signal)) {
-        return *val == m_signal;
-      } else {
+      if (signal.type() != typeid(MemFnPtr)) {
         return false;
       }
+      return std::any_cast<MemFnPtr>(signal) == m_signal;
     }
 
     void invoke(Args... args) override
