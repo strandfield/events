@@ -28,7 +28,7 @@ Definition of both a "publisher" and a "subscriber" class is facilitated.
 Publisher:
 
 ```cpp
-class MyPublisher : public Publisher<MyPublisher, MySubscriber>
+class MyPublisher : public Publisher<MySubscriber>
 {
 public:
   void greets();
@@ -38,7 +38,7 @@ public:
 Subscriber:
 
 ```cpp
-class MySubscriber : public Subscriber<MyPublisher, MySubscriber>
+class MySubscriber : public Subscriber<MyPublisher>
 {
 public:
   explicit MySubscriber(MyPublisher* pub = nullptr);
