@@ -3,6 +3,7 @@
 // For conditions of distribution and use, see copyright notice in LICENSE.
 
 #include "event-emitter.h"
+#include "object.h"
 #include "pubsub.h"
 
 #include <iostream>
@@ -17,6 +18,20 @@ void test_require(bool cond, const char* test, const char* file, int line)
 
     throw std::runtime_error("test fail!");
   }
+}
+
+void print_status_code(int status)
+{
+  std::cout << status << std::endl;
+}
+
+void test_invoke_relaxed()
+{
+  invoke_relaxed(&print_status_code, 200, "OK");
+
+  int n = 0;
+  invoke_relaxed([&n](int status) { n = status; }, 404, "Not found");
+  REQUIRE(n == 404);
 }
 
 class Person : public EventEmitter
@@ -114,7 +129,13 @@ void test_two_events()
 
   int n = 0;
   int p = 0;
-  
+
+  // if the following REQUIRE fails on MSVC, you may have to disable Identical COMDAT Folding (ICF)
+  // with the /OPT:NOICF linker flag.
+  // Reference: 
+  // https://stackoverflow.com/questions/14176320/why-are-member-function-pointers-behaving-so-weirdly-in-visual-c
+  REQUIRE(&MyClass::pChanged != &MyClass::nChanged);
+
   a.on(&MyClass::nChanged, [&n](int val){
     n = val;
   });
@@ -149,17 +170,45 @@ void test_once()
   REQUIRE(super == 1);
 }
 
-class MyPublisher;
+void test_partial_args()
+{
+  // The goal of this test is to verify that an event listener 
+  // is allowed to receive less argument than passed.
+  
+  struct PartialEE : EventEmitter
+  {
+    void twoArgs(int a, int b) {
+      emit(&PartialEE::twoArgs, a, b);
+    }
+  };
+
+  int total = 0;
+
+  PartialEE ee;
+
+  ee.on(&PartialEE::twoArgs, [&total](int a, int b){
+    total += (a + b);
+  });
+
+  ee.on(&PartialEE::twoArgs, [&total](int a){
+    total += a;
+  });
+
+  ee.twoArgs(1, 2);
+
+  REQUIRE(total == (1+2+1));
+}
+
 class MySubscriber;
 
-class MyPublisher : public Publisher<MyPublisher, MySubscriber>
+class MyPublisher : public Publisher<MySubscriber>
 {
 public:
   void greets();
   void haveLunch();
 };
 
-class MySubscriber : public Subscriber<MyPublisher, MySubscriber>
+class MySubscriber : public Subscriber<MyPublisher>
 {
 public:
   explicit MySubscriber(MyPublisher* pub = nullptr);
@@ -243,6 +292,9 @@ void test_pubsub()
   pub.addSubscriber(thegerman.get()); // no-op
   REQUIRE(pub.subscribers().size() == 2);
 
+  REQUIRE(thefrench.publisher() == &pub);
+  REQUIRE((std::is_same<decltype(thefrench.publisher()), MyPublisher*>::value));
+
   pub.greets();
   pub.haveLunch();
 
@@ -255,12 +307,82 @@ void test_pubsub()
   pub.greets();
 }
 
+class SpinBox : public Object
+{
+public:
+  void valueChanged(int n)
+  {
+    emit(&SpinBox::valueChanged, n);
+  }
+};
+
+void test_object()
+{
+  SpinBox this_is_me;
+
+  int n = 0;
+
+  Object::connect(&this_is_me, &SpinBox::valueChanged, [&n](int a) {
+    n += a;
+  });
+
+  REQUIRE(n == 0);
+  this_is_me.valueChanged(3);
+  REQUIRE(n == 3);
+}
+
+class Button : public Object
+{
+public:
+  void clicked()
+  {
+    emit(&Button::clicked);
+  }
+};
+
+class Dialog : public Object
+{
+private:
+  bool m_visible = false;
+public:
+  bool visible() const { return m_visible;}
+  void open() { m_visible = true; opened(); }
+  void opened() { emit(&Dialog::opened); }
+};
+
+void test_two_objects()
+{
+  Button mybutton;
+
+  int nopen = 0;
+
+  {
+    Dialog dialog;
+    
+    Object::connect(&mybutton, &Button::clicked, &dialog, &Dialog::open);
+    Object::connect(&dialog, &Dialog::opened, [&nopen]() {
+      ++nopen;
+    });
+
+    REQUIRE(nopen == 0);
+    mybutton.clicked();
+    REQUIRE(nopen == 1);
+  }
+
+  mybutton.clicked();
+  REQUIRE(nopen == 1);
+}
+
 void run()
 {
+  test_invoke_relaxed();
   test_disconnect();
   test_two_events();
+  test_partial_args();
   test_once();
   test_pubsub();
+  test_object();
+  test_two_objects();
 }
 
 int main()

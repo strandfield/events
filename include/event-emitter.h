@@ -5,10 +5,13 @@
 #ifndef EVENT_EMITTER_H
 #define EVENT_EMITTER_H
 
+#include "utils.h"
+
 #include <algorithm>
 #include <any>
 #include <functional>
 #include <memory>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -36,25 +39,8 @@ namespace details
   class EventListener : public AbstractEventListener
   {
   public:
-    EventListener(int i, std::function<void(Args...)> callback)
-      : AbstractEventListener(i)
-    {
-       this->callback = std::move(callback); 
-    }
-    EventListener(const EventListener&) = delete;
-    EventListener& operator=(const EventListener&) = delete;
-    ~EventListener(){}
-
-    void invoke(Args... args)
-    {
-      try {
-        callback(std::forward<Args>(args)...);
-      } catch (...) {
-      }
-    }
-
-  private:
-    std::function<void(Args...)> callback;
+    using AbstractEventListener::AbstractEventListener;
+    virtual void invoke(Args... args) = 0;
   };
 
   template<typename...Args>
@@ -62,8 +48,9 @@ namespace details
   {
   public:
     FreeFunctionEventListener(int i, void* fp, std::function<void(Args...)> callback)
-      : EventListener<Args...>(i, std::move(callback))
+      : EventListener<Args...>(i)
       , m_fn(fp)
+      , m_callback(std::move(callback))
     {
     }
     FreeFunctionEventListener(const FreeFunctionEventListener&) = delete;
@@ -75,19 +62,29 @@ namespace details
       return std::any_cast<void*>(signal) == m_fn;
     }
 
+    void invoke(Args... args) override
+    {
+      try {
+        m_callback(std::forward<Args>(args)...);
+      } catch (...) {
+      }
+    }
+
   private:
     void* m_fn;
+    std::function<void(Args...)> m_callback;
   };
 
-  template<typename Class, typename...Args>
+  template<typename Class, typename Callback, typename...Args>
   class MemberFunctionEventListener : public EventListener<Args...>
   {
   public:
     using MemFnPtr = void(Class::*)(Args...);
 
-    MemberFunctionEventListener(int i, MemFnPtr event, std::function<void(Args...)> callback)
-      : EventListener<Args...>(i, std::move(callback))
+    MemberFunctionEventListener(int i, MemFnPtr event, Callback callback)
+      : EventListener<Args...>(i)
       , m_signal(event)
+      , m_callback(std::move(callback))
     {
     }
     MemberFunctionEventListener(const MemberFunctionEventListener&) = delete;
@@ -96,11 +93,23 @@ namespace details
 
     bool matches(const std::any& signal) const override
     {
+      if (signal.type() != typeid(MemFnPtr)) {
+        return false;
+      }
       return std::any_cast<MemFnPtr>(signal) == m_signal;
+    }
+
+    void invoke(Args... args) override
+    {
+      try {
+        invoke_relaxed(m_callback, std::forward<Args>(args)...);
+      } catch (...) {
+      }
     }
 
   private:
     MemFnPtr m_signal;
+    Callback m_callback;
   };
 
 } // namespace details
@@ -162,7 +171,8 @@ public:
   ConnectionData on(void (T::*event)(Args...), F&& callback)
   {
     int id = ++m_id_generator;
-    m_listeners.push_back(std::make_unique<details::MemberFunctionEventListener<T, Args...>>(m_id_generator, event, std::forward<F>(callback)));
+    auto* listener = new details::MemberFunctionEventListener<T, F, Args...>(m_id_generator, event, std::forward<F>(callback));
+    m_listeners.push_back(std::unique_ptr<details::AbstractEventListener>(listener));
     return {this, id};
   }
 
@@ -178,8 +188,9 @@ public:
   ConnectionData once(void (T::*event)(Args...), F &&callback)
   {
     int id = ++m_id_generator;
-    m_listeners.push_back(std::make_unique<details::MemberFunctionEventListener<T, Args...>>(m_id_generator, event, std::forward<F>(callback)));
-    m_listeners.back()->once_flag = true;
+    auto* listener = new details::MemberFunctionEventListener<T, F, Args...>(m_id_generator, event, std::forward<F>(callback));
+    m_listeners.push_back(std::unique_ptr<details::AbstractEventListener>(listener));
+    listener->once_flag = true;
     return {this, id};
   }
 
